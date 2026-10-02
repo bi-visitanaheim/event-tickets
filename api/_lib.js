@@ -179,7 +179,7 @@ export async function sendMail({ to, subject, text, replyTo, attachment }) {
   if (!list.length) { const e = new Error("Add an email address"); e.status = 400; throw e; }
   const from = process.env.MAIL_FROM || "events@visitanaheim.org";
   if (process.env.SENDGRID_API_KEY) {
-    const body = { personalizations: [{ to: list.map(email => ({ email })) }], from: { email: from, name: "Visit Anaheim Event Tickets" }, subject, content: [{ type: "text/plain", value: text }, { type: "text/html", value: htmlMail(text) }] };
+    const body = { personalizations: [{ to: list.map(email => ({ email })) }], from: { email: from, name: process.env.MAIL_FROM_NAME || "Visit Anaheim Event Tickets" }, subject, content: [{ type: "text/plain", value: text }, { type: "text/html", value: htmlMail(text) }] };
     if (replyTo) body.reply_to = { email: replyTo };
     if (attachment) body.attachments = [{ content: attachment.base64, filename: attachment.filename, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disposition: "attachment" }];
     const r = await fetch("https://api.sendgrid.com/v3/mail/send", { method: "POST", headers: { Authorization: "Bearer " + process.env.SENDGRID_API_KEY, "Content-Type": "application/json" }, body: JSON.stringify(body) });

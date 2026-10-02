@@ -44,6 +44,7 @@ The first time the app opens, it loads Nana's real events and requests automatic
 | `NANA_ACCESS_CODE` | No | Leave this out and Nana opens her view from her own link (the app address followed by `?nana`). Add it later to require a code for Nana's view, the tracker and downloads |
 | `SENDGRID_API_KEY` | For email | Same SendGrid key as the Vans form |
 | `MAIL_FROM` | For email | Verified sender, e.g. `events@visitanaheim.org` (default) |
+| `MAIL_FROM_NAME` | No | The name people see on the email, such as `Nana Cho`. Defaults to Visit Anaheim Event Tickets |
 | `NANA_EMAIL` | Optional | Where the morning spreadsheet goes (otherwise Nana's email in Settings) |
 | `CRON_SECRET` | Recommended | Any long random string; protects the morning job |
 
