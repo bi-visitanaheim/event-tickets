@@ -9,8 +9,12 @@ export const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 
 /* ---------- storage ---------- */
 export async function redis(cmds) {
-  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
-  if (!url || !tok) { const e = new Error("Storage is not connected yet"); e.status = 503; throw e; }
+  const clean = v => String(v || "").trim().replace(/^["']+|["']+$/g, "").trim();
+  const pick = (...names) => { for (const n of names) { const v = clean(process.env[n]); if (v) return v; } return ""; };
+  /* Accepts Vercel's names (KV_REST_API_*) or the names Upstash shows (UPSTASH_REDIS_REST_*), with or without quotes. */
+  let url = pick("KV_REST_API_URL", "UPSTASH_REDIS_REST_URL"); const tok = pick("KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN");
+  if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+  if (!url || !tok) { const e = new Error("Storage is not connected yet" + (!url && !tok ? " (no storage address or token found)" : !url ? " (storage address missing)" : " (storage token missing)")); e.status = 503; throw e; }
   const r = await fetch(url.replace(/\/$/, "") + "/pipeline", {
     method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(cmds)
   });

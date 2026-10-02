@@ -34,7 +34,7 @@ Publish this folder as `bi-visitanaheim/event-tickets` (GitHub Desktop: Add loca
 The Vercel project `event-tickets` imports the repo. No build settings needed; `vercel.json` has them.
 
 ### 3. Storage (required)
-Vercel → project → **Storage** → **Connect Database** → Upstash for Redis (create new, or connect the existing one). Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` itself. All keys are stored under `et:` so a shared database is fine.
+Vercel → project → **Storage** → **Connect Database** → Upstash for Redis (create new, or connect the existing one). Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` itself. If you create the database at console.upstash.com instead, add them by hand; the app also accepts Upstash's own names, `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. All keys are stored under `et:` so a shared database is fine.
 The first time the app opens, it loads Nana's real events and requests automatically.
 
 ### 4. Environment variables
