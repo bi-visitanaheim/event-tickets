@@ -580,7 +580,7 @@ function msgUpdate(){const list=upcoming().filter(e=>days(ed(e),TODAY)<=30);retu
 function header(){
   const modes=isNana()?`<div class="modes" role="group" aria-label="View"><button data-a="mode" data-v="requester" aria-pressed="${S.mode==="requester"}">Requester view</button><button data-a="mode" data-v="nana" aria-pressed="${S.mode==="nana"}">Nana's view</button></div>`:"";
   const tabs=S.mode==="nana"?[["work","Workflow",boardCount()],["events","Calendar & events",0],["tracker","Tracker",0],["joy","Joy's report",0],["help","How it works",0],["answers","Questions & answers",0],["settings","Settings",0]]
-    :[["events","Events",0],["mine","My requests",mine().filter(r=>!CLOSED.includes(r.status)).length],...((isApprover()||isNana())?[["approvals","Approvals",D.requests.filter(r=>r.status==="approval").length]]:[]),["help","How it works",0]];
+    :[["events","Events",0],["mine","My requests",mine().filter(r=>!CLOSED.includes(r.status)).length],...((isApprover()||isNana()||window.__VERCEL)?[["approvals","Approvals",D.requests.filter(r=>r.status==="approval").length]]:[]),["help","How it works",0]];
   const cur=S.tab[S.mode];
   return `<header class="top"><div class="wrap"><div class="top-row">
   <img class="logo logo-light" src="${LOGO_TEAL}" alt="Visit Anaheim"><img class="logo logo-dark" src="${LOGO_LIGHT}" alt="Visit Anaheim">
@@ -712,6 +712,7 @@ function viewMine(){
     ${S.confirmCancel===r.id?`<div class="callout warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${back?"Let Nana know the tickets are coming back?":"Cancel this request? The tickets go to the next person in line."}<span class="spacer"></span><button class="btn sm" data-a="keep">Keep it</button><button class="btn sm primary" data-a="${back?"comingback":"cancelreq"}" data-v="${r.id}">Yes</button></div>`
       :(can||back)?`<div class="actions"><button class="btn sm danger" data-a="askcancel" data-v="${r.id}">${back?"My client can't go":r.status==="approved"?"Plans changed · release tickets":"Cancel request"}</button></div>`:""}</div>`};
   return `<div class="page-head"><div><div class="overline">My requests</div><h1>Where your requests stand</h1><p class="lede">You'll hear from Nana at each step. If plans change, let her know here so the next person in line can use the tickets.</p></div><button class="btn primary" data-a="tab" data-v="events">Request tickets</button></div>
+  ${S.me.email?"":`<div class="callout" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><div class="field" style="min-width:260px;flex:1"><label for="me-email">Your work email</label><input id="me-email" type="email" placeholder="name@visitanaheim.org" autocomplete="email"></div><button class="btn primary" data-a="setme">Show my requests</button></div>`}
   <div class="stack">${open.length?open.map(card).join(""):`<div class="empty">No open requests. Pick an event on the Events tab to request tickets.</div>`}</div>
   ${done.length?`<details class="done-list"><summary>Past and closed requests (${done.length})</summary><div class="stack" style="margin-top:12px">${done.map(card).join("")}</div></details>`:""}`;
 }
@@ -900,7 +901,7 @@ function reqModal(m){
    ${field("f-name","VA Requestor's full name",`<input id="f-name" value="${v("name",m.onBehalf?"":S.me.name)}" autocomplete="name">`,"",er.name)}
    ${field("f-title","VA Requestor's title",`<input id="f-title" value="${v("title",m.onBehalf?"":prefs.title||"")}">`,"",er.title)}
    ${field("f-dept","VA Requestor's department",`<select id="f-dept"><option value="">Choose…</option>${DEPTS.map(x=>`<option ${(d.dept!==undefined?d.dept:(m.onBehalf?"":prefs.dept))===x?"selected":""}>${x}</option>`).join("")}</select>`,"",er.dept)}
-   ${m.onBehalf?field("f-remail","Requester's email",`<input id="f-remail" type="email" value="${v("remail","")}">`,"So the request shows on their My requests page",""):""}
+   ${field("f-remail",m.onBehalf?"Requester's email":"VA Requestor's work email",`<input id="f-remail" type="email" value="${v("remail",m.onBehalf?"":(S.me.email||""))}" autocomplete="email" placeholder="name@visitanaheim.org">`,m.onBehalf?"So the request shows on their My requests page":"We email your confirmation here, and it lets you see your requests.",er.remail)}
   </div></fieldset>
   <fieldset><legend>Client</legend><div class="grid2">
    ${field("f-cname","Client's full name",`<input id="f-cname" value="${v("cname","")}">`,"",er.cname)}
@@ -998,11 +999,12 @@ async function submitReq(){
   const m=S.modal;if(m.pickEvent)m.eventId=val("f-ev");const e=evById(m.eventId);
   const d=readDraft();
   const er={};["name","title","dept","cname","ctitle","ccomp","reason"].forEach(k=>{if(!d[k])er[k]="Please fill this in"});
-  if(!d.park)er.park="Choose yes or no";if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email))er.email="Enter a valid email address";if(!e)er.ev="Choose an event";
+  if(!m.onBehalf&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.remail))er.remail="Enter your work email";if(!d.park)er.park="Choose yes or no";if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email))er.email="Enter a valid email address";if(!e)er.ev="Choose an event";
   m.draft=d;m.errors=er;
   if(Object.keys(er).length){m._focused=true;renderOverlay();const f=document.querySelector("#overlay .field.invalid input,#overlay .field.invalid select,#overlay .field.invalid textarea");if(f)f.focus();return}
   if(!m.onBehalf){try{localStorage.setItem("vaet-me",JSON.stringify({title:d.title,dept:d.dept}))}catch(x){}}
-  const data={eventId:e.id,createdAt:Date.now(),requesterId:m.onBehalf?null:S.me.id,requesterName:d.name,requesterTitle:d.title,dept:d.dept,requesterEmail:m.onBehalf?d.remail:(S.me.email||""),clientName:d.cname,clientTitle:d.ctitle,clientCompany:d.ccomp,reason:d.reason,tickets:d.tix,parking:d.park==="yes",attendees:d.guests.filter(g=>g.name),sendTo:d.email,option:nextOption(e),status:"new",approver:"",sample:false};
+  const data={eventId:e.id,createdAt:Date.now(),requesterId:m.onBehalf?null:(d.remail||"").toLowerCase(),requesterName:d.name,requesterTitle:d.title,dept:d.dept,requesterEmail:d.remail||"",clientName:d.cname,clientTitle:d.ctitle,clientCompany:d.ccomp,reason:d.reason,tickets:d.tix,parking:d.park==="yes",attendees:d.guests.filter(g=>g.name),sendTo:d.email,option:nextOption(e),status:"new",approver:"",sample:false};
+  if(!m.onBehalf){S.me={name:d.name,email:d.remail,id:d.remail.toLowerCase(),avatarUrl:S.me.avatarUrl||""};try{window.__setMe&&window.__setMe(d.name,d.remail)}catch(x){}}
   await createReq(data);m.done=data;m.draft=null;renderOverlay();
   if(mailOn()){const st=settings();const when=`${title(e)} · ${fmtLong(ed(e))} · ${fmtTime(e.time)}`;
     if(data.requesterEmail)window.__mail.send({to:data.requesterEmail,subject:`We received your ticket request: ${title(e)}`,replyTo:st.coordinatorEmail||undefined,text:`Hi ${first(data.requesterName)},\n\nThanks for your request for ${when}. You're Option ${data.option}.\n\nNext, ${first(st.coordinator)} confirms availability and your option number, then ${primaryApprover().name} (or another C-suite member) approves. Tickets are typically transferred the week of the event, in case of cancellation.\n\nTrack it any time under My requests: ${location.origin}${sig()}`}).catch(()=>{});
@@ -1031,7 +1033,8 @@ const A={
   toast(changed?`Updated to ${amount(n,r.parking)}.`:"Guest names saved.")},
  request(v){S.modal={type:"req",eventId:v,onBehalf:S.mode==="nana"};renderOverlay()},
  addreq(){const f=upcoming()[0];S.modal={type:"req",eventId:f&&f.id,onBehalf:true,pickEvent:true};renderOverlay()},
- submitreq(){submitReq()},gomine(){S.modal=null;S.sheet=null;S.mode="requester";S.tab.requester="mine";renderAll();renderOverlay()},
+ submitreq(){submitReq()},
+ setme(){const em=val("me-email");if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast("Enter your work email.");return}S.me={name:S.me.name||"",email:em,id:em.toLowerCase(),avatarUrl:S.me.avatarUrl||""};try{window.__setMe&&window.__setMe(S.me.name,em)}catch(x){}renderAll()},gomine(){S.modal=null;S.sheet=null;S.mode="requester";S.tab.requester="mine";renderAll();renderOverlay()},
  askcancel(v){S.confirmCancel=v;renderMain()},keep(){S.confirmCancel=null;renderMain()},
  async cancelreq(v){const r=R(v),e=evById(r.eventId);const held=HOLDS.includes(r.status);S.confirmCancel=null;await upd(r,{status:"cancelled"},"Cancelled by requester");if(held){const p=await promote(e);if(p.length)toast(`Cancelled. ${p[0].requesterName} moved up.`);else toast("Cancelled. Nana has been notified.")}else toast("Request cancelled.")},
  async comingback(v){const r=R(v);S.confirmCancel=null;await upd(r,{comingBack:true},"Requester says the tickets are coming back");toast("Thanks. Nana will take it from here.")},

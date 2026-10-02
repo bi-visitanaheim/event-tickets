@@ -1,12 +1,13 @@
 /* Event Tickets — connects the app to its Vercel back end.
-   Provides sign-in (name and work email; an access code only when one is set), live data (checks for changes every 30 seconds),
+   Opens with no sign-in (an access code screen appears only if one is set), live data (checks for changes every 30 seconds),
    Excel downloads, email sending and the link to the master spreadsheet. */
 (function () {
   "use strict";
   const KEY = "vaet-session";
   const wantNana = /(^|[?&#])nana(=|&|$)/i.test(location.search + location.hash) ? "nana" : "";
-  let sess = null;
-  try { sess = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
+  let sess = { name: "", email: "", code: "", role: wantNana || "team" };
+  try { const o = JSON.parse(localStorage.getItem(KEY + "-me") || localStorage.getItem(KEY) || "null"); if (o) { sess.name = o.name || ""; sess.email = o.email || ""; } } catch (e) {}
+  window.__setMe = (name, email) => { sess.name = name || ""; sess.email = email || ""; try { localStorage.setItem(KEY + "-me", JSON.stringify({ name: sess.name, email: sess.email })); } catch (e) {} };
   window.__VERCEL = true;
   const hdr = () => ({ "Content-Type": "application/json", "x-access-code": sess ? (sess.code || "") : "", "x-role": sess ? (sess.role || "") : "" });
 
@@ -60,7 +61,7 @@
     return "data:image/svg+xml;base64," + btoa(svg);
   }
   const user = {
-    async me() { const nana = sess.role === "nana"; return { id: sess.email.toLowerCase(), name: sess.name, email: sess.email.toLowerCase(), avatarUrl: initialsAvatar(sess.name), color: "#43A3A3", isOwner: nana, canEdit: nana }; },
+    async me() { const nana = sess.role === "nana"; return { id: sess.email ? sess.email.toLowerCase() : null, name: sess.name || (nana ? "Nana" : ""), email: sess.email ? sess.email.toLowerCase() : null, avatarUrl: initialsAvatar(sess.name || (nana ? "Nana" : "")), color: "#43A3A3", isOwner: nana, canEdit: nana }; },
     async can() { return true; }, async canEdit() { return sess.role === "nana"; }, async isOwner() { return sess.role === "nana"; },
     async search() { return []; }, async profiles(ids) { const o = {}; [].concat(ids).forEach(id => o[id] = { id, name: "", avatarUrl: initialsAvatar("?"), email: null, isMe: false, guest: false }); return o; }
   };
@@ -78,52 +79,56 @@
   window.__mail = { enabled: false, async send(o) { const r = await fetch("/api/mail", { method: "POST", headers: hdr(), body: JSON.stringify(o) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Email didn't send"); } };
   window.__sheet = { status: null, masterUrl: () => "/api/export?code=" + encodeURIComponent(sess ? (sess.code || "") : "") + "&role=" + encodeURIComponent(sess ? (sess.role || "") : ""), async refresh() { try { const r = await fetch("/api/status", { headers: hdr() }); if (r.ok) { const j = await r.json(); window.__mail.enabled = !!j.email; window.__sheet.status = j; } } catch (e) {} } };
   window.__signOut = signOut;
-  function signOut() { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); }
+  function signOut() { try { localStorage.removeItem(KEY + "-code"); } catch (e) {} location.reload(); }
 
   /* ---------- banner ---------- */
   let bannerEl = null;
   function showBanner(t) { if (!bannerEl) { bannerEl = document.createElement("div"); bannerEl.style.cssText = "position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:70;background:#9A3F0A;color:#fff;padding:10px 16px;border-radius:999px;font:700 14px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:calc(100% - 32px)"; document.body.appendChild(bannerEl); } bannerEl.textContent = t; bannerEl.hidden = false; }
   function hideBanner() { if (bannerEl) bannerEl.hidden = true; }
 
-  /* ---------- sign-in screen ---------- */
-  async function signIn() {
-    let open = false, nanaCode = true;
-    try { const j = await (await fetch("/api/login")).json(); open = !!j.open; nanaCode = !!j.nanaCode; } catch (e) {}
-    const showCode = !open || nanaCode;
+  /* ---------- opening the app ----------
+     No sign-in screen. The person is remembered in this browser once they send a request (or type their email under My requests).
+     Nana's link ends in ?nana. A code screen appears only if an access code has been set on the server. */
+  function askCode(label, hint) {
     return new Promise(resolve => {
       const w = document.createElement("div");
       w.innerHTML = `<div style="position:fixed;inset:0;z-index:80;background:var(--bg,#F9F9F2);display:grid;place-items:center;padding:16px;overflow:auto">
       <form id="si" style="background:var(--surface,#fff);border:1px solid var(--line,#E3E2DA);border-radius:18px;box-shadow:0 18px 40px rgba(35,31,32,.14);padding:28px;width:min(420px,100%);display:grid;gap:14px;font-family:var(--font,system-ui)">
        <img src="${window.__LOGO || ""}" alt="Visit Anaheim" style="height:34px;width:auto;justify-self:start">
        <h1 style="margin:0;font-weight:800;font-style:italic;font-size:30px;color:var(--brand,#125C60)">Event Tickets</h1>
-       <p style="margin:0;color:var(--ink2,#4A4647)">Honda Center and Angels tickets for Visit Anaheim clients. Tell us who you are to see what's open and request tickets.</p>
-       <label style="display:grid;gap:5px;font-weight:700;font-size:13px">Your name<input id="si-n" required autocomplete="name" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"></label>
-       <label style="display:grid;gap:5px;font-weight:700;font-size:13px">Your work email<input id="si-e" type="email" required autocomplete="email" placeholder="name@visitanaheim.org" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"></label>
-       ${showCode ? `<label style="display:grid;gap:5px;font-weight:700;font-size:13px">${open ? "Coordinator code (Nana only)" : "Access code"}<input id="si-c" ${open ? "" : "required"} autocomplete="off" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"><span style="font-weight:400;color:var(--muted,#6B6668)">${open ? "Leave this blank unless you are Nana or her backup." : "Nana shares this with leadership."}</span></label>` : ""}
+       <label style="display:grid;gap:5px;font-weight:700;font-size:13px">${label}<input id="si-c" required autocomplete="off" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"><span style="font-weight:400;color:var(--muted,#6B6668)">${hint}</span></label>
        <div id="si-err" style="color:#A10009;font-weight:700;font-size:13px" hidden></div>
-       <button style="border:0;background:#125C60;color:#F9F9F2;border-radius:999px;padding:12px 18px;font:inherit;font-weight:700;font-size:15px;cursor:pointer">${open ? "Continue" : "Sign in"}</button>
+       <button style="border:0;background:#125C60;color:#F9F9F2;border-radius:999px;padding:12px 18px;font:inherit;font-weight:700;font-size:15px;cursor:pointer">Continue</button>
       </form></div>`;
       document.body.appendChild(w);
       const f = w.querySelector("#si"), err = w.querySelector("#si-err");
       f.addEventListener("submit", async ev => {
         ev.preventDefault();
-        const name = f.querySelector("#si-n").value.trim(), email = f.querySelector("#si-e").value.trim(), code = showCode ? f.querySelector("#si-c").value.trim() : "";
-        if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (!open && !code)) { err.textContent = open ? "Fill in your name and work email." : "Fill in your name, email and the access code."; err.hidden = false; return; }
+        const code = f.querySelector("#si-c").value.trim();
         try {
           const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, want: wantNana }) });
           const j = await r.json().catch(() => ({}));
           if (!r.ok) { err.textContent = j.error || "That didn't work. Try again."; err.hidden = false; return; }
-          sess = { name, email, code, role: j.role, open: true };
-          try { localStorage.setItem(KEY, JSON.stringify(sess)); } catch (e) {}
-          w.remove(); resolve();
+          w.remove(); resolve({ code, role: j.role });
         } catch (e) { err.textContent = "Couldn't reach the app. Check your connection."; err.hidden = false; }
       });
-      setTimeout(() => f.querySelector("#si-n").focus(), 50);
+      setTimeout(() => f.querySelector("#si-c").focus(), 50);
     });
   }
-  /* Without codes, Nana's link (ends in ?nana) opens her view; every other link opens the requester view. */
-  if (sess && sess.open && !sess.code && sess.role !== (wantNana || "team")) { try { fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "", want: wantNana }) }).then(r => r.ok ? r.json() : null).then(j => { if (j && j.role !== sess.role) { sess.role = j.role; localStorage.setItem(KEY, JSON.stringify(sess)); location.reload(); } }); } catch (e) {} }
-  const ready = (sess && sess.email && (sess.code || sess.open)) ? Promise.resolve() : signIn();
+  const ready = (async () => {
+    let info = { open: true, nanaCode: false };
+    try { info = await (await fetch("/api/login")).json(); } catch (e) {}
+    let code = ""; try { code = localStorage.getItem(KEY + "-code") || ""; } catch (e) {}
+    const need = !info.open || (info.nanaCode && wantNana);
+    let role = wantNana || "team";
+    if (need && !code) {
+      const g = await askCode(info.open ? "Coordinator code" : "Access code", info.open ? "Nana's view needs her code." : "Ask Nana for the access code.");
+      code = g.code; role = g.role; try { localStorage.setItem(KEY + "-code", code); } catch (e) {}
+    } else {
+      try { const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, want: wantNana }) }); const j = await r.json().catch(() => ({})); if (r.ok) role = j.role; else if (need) { signOut(); return; } } catch (e) {}
+    }
+    sess.code = code; sess.role = role;
+  })();
   const caps = { db, user, downloads };
   window.claude = { use: async n => { await ready; await window.__sheet.refresh(); return caps[n] || null; } };
 })();
