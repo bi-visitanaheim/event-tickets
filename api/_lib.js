@@ -50,11 +50,19 @@ export async function setMeta(key, val) { await redis([["SET", P + "meta:" + key
 export async function getMeta(key) { const [v] = await redis([["GET", P + "meta:" + key]]); return v ? JSON.parse(v) : null; }
 
 /* ---------- access ---------- */
+/* Codes are optional. With no codes set, the app is open to anyone with the link and Nana opens her view from
+   her own link (it ends in ?nana). Set NANA_ACCESS_CODE and/or TEAM_ACCESS_CODE in Vercel to require codes again. */
+export function openMode() { return !process.env.TEAM_ACCESS_CODE; }
+export function nanaCodeSet() { return !!process.env.NANA_ACCESS_CODE; }
 export function role(req) {
   const c = String(req.headers["x-access-code"] || req.query?.code || "").trim();
-  if (!c) return null;
-  if (process.env.NANA_ACCESS_CODE && c === process.env.NANA_ACCESS_CODE) return "nana";
-  if (process.env.TEAM_ACCESS_CODE && c === process.env.TEAM_ACCESS_CODE) return "team";
+  if (c && process.env.NANA_ACCESS_CODE && c === process.env.NANA_ACCESS_CODE) return "nana";
+  if (openMode()) {
+    if (c) return null;
+    const want = String(req.headers["x-role"] || req.query?.role || "");
+    return want === "nana" && !nanaCodeSet() ? "nana" : "team";
+  }
+  if (c && c === process.env.TEAM_ACCESS_CODE) return "team";
   return null;
 }
 export function fail(res, e) { console.error(e); res.status(e.status || 500).json({ error: e.message || "Something went wrong" }); }

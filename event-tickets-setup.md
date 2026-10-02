@@ -16,9 +16,9 @@ A plain static page (`index.html` + `shim.js`) with Vercel Functions in `api/`, 
 | File | What it does |
 | --- | --- |
 | `index.html` | The whole app (VA Branded: Sharp Sans, Escapism teal) |
-| `shim.js` | Sign-in with name, work email and access code; live data; downloads; email |
+| `shim.js` | Sign-in with name and work email (codes only if TEAM_ACCESS_CODE / NANA_ACCESS_CODE are set); live data; downloads; email |
 | `api/db.js` | Reads and saves events, requests and settings |
-| `api/login.js` | Checks the access code (team or Nana) |
+| `api/login.js` | Reports which codes are required and checks them when set |
 | `api/mail.js` | Sends the app's emails |
 | `api/export.js` | Downloads the master spreadsheet (Nana's code only); Excel can also connect to it live |
 | `api/cron.js` | Every morning: refreshes the SharePoint copy and emails Nana the spreadsheet |
@@ -40,8 +40,8 @@ The first time the app opens, it loads Nana's real events and requests automatic
 ### 4. Environment variables
 | Name | Needed? | Value |
 | --- | --- | --- |
-| `TEAM_ACCESS_CODE` | Yes | Code leadership uses to sign in |
-| `NANA_ACCESS_CODE` | Yes | Nana's code (opens Nana's view). Share only with Nana and her backup |
+| `TEAM_ACCESS_CODE` | No | Leave this out and leadership only enters a name and work email (no code). Add it later to require a code again |
+| `NANA_ACCESS_CODE` | No | Leave this out and Nana opens her view from her own link (the app address followed by `?nana`). Add it later to require a code for Nana's view, the tracker and downloads |
 | `SENDGRID_API_KEY` | For email | Same SendGrid key as the Vans form |
 | `MAIL_FROM` | For email | Verified sender, e.g. `events@visitanaheim.org` (default) |
 | `NANA_EMAIL` | Optional | Where the morning spreadsheet goes (otherwise Nana's email in Settings) |
@@ -65,4 +65,4 @@ Until then, Nana always has the data three ways: the **Download master spreadshe
 ## Before sharing with leadership
 1. Sign in with Nana's code → Settings → add each approver's email (Ronnie Collins is primary) and Nana's email.
 2. Delete any test requests made while trying the app.
-3. Send leadership the link and the team access code.
+3. Send leadership the link. They enter their name and work email. Send Nana her own link: the same address followed by `?nana`. Without codes, anyone who has the link can open the app, and anyone who has Nana's link can open her view, so share each link only with the people it is for.

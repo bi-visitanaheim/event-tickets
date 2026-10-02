@@ -1,13 +1,14 @@
 /* Event Tickets — connects the app to its Vercel back end.
-   Provides sign-in (name, work email, access code), live data (checks for changes every 10 seconds),
+   Provides sign-in (name and work email; an access code only when one is set), live data (checks for changes every 10 seconds),
    Excel downloads, email sending and the link to the master spreadsheet. */
 (function () {
   "use strict";
   const KEY = "vaet-session";
+  const wantNana = /(^|[?&#])nana(=|&|$)/i.test(location.search + location.hash) ? "nana" : "";
   let sess = null;
   try { sess = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
   window.__VERCEL = true;
-  const hdr = () => ({ "Content-Type": "application/json", "x-access-code": sess ? sess.code : "" });
+  const hdr = () => ({ "Content-Type": "application/json", "x-access-code": sess ? (sess.code || "") : "", "x-role": sess ? (sess.role || "") : "" });
 
   /* ---------- data ---------- */
   let ver = 0, cache = { events: {}, requests: {}, settings: {} }, loaded = false, timer = null;
@@ -75,7 +76,7 @@
 
   /* ---------- email + spreadsheet status ---------- */
   window.__mail = { enabled: false, async send(o) { const r = await fetch("/api/mail", { method: "POST", headers: hdr(), body: JSON.stringify(o) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Email didn't send"); } };
-  window.__sheet = { status: null, masterUrl: () => "/api/export?code=" + encodeURIComponent(sess ? sess.code : ""), async refresh() { try { const r = await fetch("/api/status", { headers: hdr() }); if (r.ok) { const j = await r.json(); window.__mail.enabled = !!j.email; window.__sheet.status = j; } } catch (e) {} } };
+  window.__sheet = { status: null, masterUrl: () => "/api/export?code=" + encodeURIComponent(sess ? (sess.code || "") : "") + "&role=" + encodeURIComponent(sess ? (sess.role || "") : ""), async refresh() { try { const r = await fetch("/api/status", { headers: hdr() }); if (r.ok) { const j = await r.json(); window.__mail.enabled = !!j.email; window.__sheet.status = j; } } catch (e) {} } };
   window.__signOut = signOut;
   function signOut() { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); }
 
@@ -85,31 +86,34 @@
   function hideBanner() { if (bannerEl) bannerEl.hidden = true; }
 
   /* ---------- sign-in screen ---------- */
-  function signIn() {
+  async function signIn() {
+    let open = false, nanaCode = true;
+    try { const j = await (await fetch("/api/login")).json(); open = !!j.open; nanaCode = !!j.nanaCode; } catch (e) {}
+    const showCode = !open || nanaCode;
     return new Promise(resolve => {
       const w = document.createElement("div");
       w.innerHTML = `<div style="position:fixed;inset:0;z-index:80;background:var(--bg,#F9F9F2);display:grid;place-items:center;padding:16px;overflow:auto">
       <form id="si" style="background:var(--surface,#fff);border:1px solid var(--line,#E3E2DA);border-radius:18px;box-shadow:0 18px 40px rgba(35,31,32,.14);padding:28px;width:min(420px,100%);display:grid;gap:14px;font-family:var(--font,system-ui)">
        <img src="${window.__LOGO || ""}" alt="Visit Anaheim" style="height:34px;width:auto;justify-self:start">
        <h1 style="margin:0;font-weight:800;font-style:italic;font-size:30px;color:var(--brand,#125C60)">Event Tickets</h1>
-       <p style="margin:0;color:var(--ink2,#4A4647)">Honda Center and Angels tickets for Visit Anaheim clients. Sign in to see what's open and request tickets.</p>
+       <p style="margin:0;color:var(--ink2,#4A4647)">Honda Center and Angels tickets for Visit Anaheim clients. Tell us who you are to see what's open and request tickets.</p>
        <label style="display:grid;gap:5px;font-weight:700;font-size:13px">Your name<input id="si-n" required autocomplete="name" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"></label>
        <label style="display:grid;gap:5px;font-weight:700;font-size:13px">Your work email<input id="si-e" type="email" required autocomplete="email" placeholder="name@visitanaheim.org" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"></label>
-       <label style="display:grid;gap:5px;font-weight:700;font-size:13px">Access code<input id="si-c" required autocomplete="off" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"><span style="font-weight:400;color:var(--muted,#6B6668)">Nana shares this with leadership.</span></label>
+       ${showCode ? `<label style="display:grid;gap:5px;font-weight:700;font-size:13px">${open ? "Coordinator code (Nana only)" : "Access code"}<input id="si-c" ${open ? "" : "required"} autocomplete="off" style="border:1px solid var(--line,#E3E2DA);border-radius:9px;padding:10px 12px;font:inherit;font-weight:400"><span style="font-weight:400;color:var(--muted,#6B6668)">${open ? "Leave this blank unless you are Nana or her backup." : "Nana shares this with leadership."}</span></label>` : ""}
        <div id="si-err" style="color:#A10009;font-weight:700;font-size:13px" hidden></div>
-       <button style="border:0;background:#125C60;color:#F9F9F2;border-radius:999px;padding:12px 18px;font:inherit;font-weight:700;font-size:15px;cursor:pointer">Sign in</button>
+       <button style="border:0;background:#125C60;color:#F9F9F2;border-radius:999px;padding:12px 18px;font:inherit;font-weight:700;font-size:15px;cursor:pointer">${open ? "Continue" : "Sign in"}</button>
       </form></div>`;
       document.body.appendChild(w);
       const f = w.querySelector("#si"), err = w.querySelector("#si-err");
       f.addEventListener("submit", async ev => {
         ev.preventDefault();
-        const name = f.querySelector("#si-n").value.trim(), email = f.querySelector("#si-e").value.trim(), code = f.querySelector("#si-c").value.trim();
-        if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !code) { err.textContent = "Fill in your name, email and the access code."; err.hidden = false; return; }
+        const name = f.querySelector("#si-n").value.trim(), email = f.querySelector("#si-e").value.trim(), code = showCode ? f.querySelector("#si-c").value.trim() : "";
+        if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (!open && !code)) { err.textContent = open ? "Fill in your name and work email." : "Fill in your name, email and the access code."; err.hidden = false; return; }
         try {
-          const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+          const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, want: wantNana }) });
           const j = await r.json().catch(() => ({}));
           if (!r.ok) { err.textContent = j.error || "That didn't work. Try again."; err.hidden = false; return; }
-          sess = { name, email, code, role: j.role };
+          sess = { name, email, code, role: j.role, open: true };
           try { localStorage.setItem(KEY, JSON.stringify(sess)); } catch (e) {}
           w.remove(); resolve();
         } catch (e) { err.textContent = "Couldn't reach the app. Check your connection."; err.hidden = false; }
@@ -117,7 +121,9 @@
       setTimeout(() => f.querySelector("#si-n").focus(), 50);
     });
   }
-  const ready = (sess && sess.code && sess.email) ? Promise.resolve() : signIn();
+  /* Without codes, Nana's link (ends in ?nana) opens her view; every other link opens the requester view. */
+  if (sess && sess.open && !sess.code && sess.role !== (wantNana || "team")) { try { fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "", want: wantNana }) }).then(r => r.ok ? r.json() : null).then(j => { if (j && j.role !== sess.role) { sess.role = j.role; localStorage.setItem(KEY, JSON.stringify(sess)); location.reload(); } }); } catch (e) {} }
+  const ready = (sess && sess.email && (sess.code || sess.open)) ? Promise.resolve() : signIn();
   const caps = { db, user, downloads };
   window.claude = { use: async n => { await ready; await window.__sheet.refresh(); return caps[n] || null; } };
 })();
