@@ -1,5 +1,5 @@
 /* Event Tickets — connects the app to its Vercel back end.
-   Provides sign-in (name and work email; an access code only when one is set), live data (checks for changes every 10 seconds),
+   Provides sign-in (name and work email; an access code only when one is set), live data (checks for changes every 30 seconds),
    Excel downloads, email sending and the link to the master spreadsheet. */
 (function () {
   "use strict";
@@ -28,7 +28,7 @@
   function start() {
     if (timer) return;
     pull(true);
-    timer = setInterval(() => { if (document.visibilityState === "visible") pull(false); }, 10000);
+    timer = setInterval(() => { if (document.visibilityState === "visible") pull(false); }, 30000);
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pull(false); });
   }
   const snap = (col, id) => ({ id, exists: !!(cache[col] || {})[id], data: () => (cache[col] || {})[id] ? JSON.parse(JSON.stringify(cache[col][id])) : undefined, metadata: {} });
