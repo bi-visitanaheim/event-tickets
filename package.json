@@ -1,0 +1,12 @@
+{
+  "name": "event-tickets",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Visit Anaheim Event Tickets: Honda Center and Angels ticket requests, approvals and tracking",
+  "dependencies": {
+    "@vercel/functions": "^2.0.0",
+    "exceljs": "^4.4.0"
+  },
+  "engines": { "node": "22.x" }
+}

@@ -1,0 +1,21 @@
+{
+  "buildCommand": "node scripts/build.mjs",
+  "outputDirectory": "public",
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "45 13 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}

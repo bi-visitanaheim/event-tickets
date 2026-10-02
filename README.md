@@ -1,0 +1,65 @@
+# Event Tickets · Visit Anaheim
+
+Honda Center and Angels ticket requests for Visit Anaheim leadership, managed by Nana Cho.
+
+- **Requester view:** events calendar, request form (Nana's 10 questions), My requests, Approvals for C-suite approvers.
+- **Nana's view:** workflow (New → Option confirmed → With approver → Approved → Tickets sent), calendar & events, tracker, Joy's allocation report, questions & answers, settings.
+- **Master spreadsheet:** `Event Tickets - Master.xlsx` has the tracker (Nana's four-rows-per-event layout), every request, Joy's allocation report, the event list and the color key. It's built from the live data and is always current.
+
+## How it's built
+
+A plain static page (`index.html` + `shim.js`) with Vercel Functions in `api/`, the same pattern as the Vans order form.
+
+| File | What it does |
+| --- | --- |
+| `index.html` | The whole app (VA Branded: Sharp Sans, Escapism teal) |
+| `shim.js` | Sign-in with name, work email and access code; live data; downloads; email |
+| `api/db.js` | Reads and saves events, requests and settings |
+| `api/login.js` | Checks the access code (team or Nana) |
+| `api/mail.js` | Sends the app's emails |
+| `api/export.js` | Downloads the master spreadsheet (Nana's code only); Excel can also connect to it live |
+| `api/cron.js` | Every morning: refreshes the SharePoint copy and emails Nana the spreadsheet |
+| `api/_lib.js` | Storage, access codes, spreadsheet builder, SharePoint and email helpers |
+| `api/_seed.js` | Starting data: 2026–27 Honda Center season, real donations, sample requests |
+
+## Setup (one time)
+
+### 1. GitHub
+Publish this folder as `bi-visitanaheim/event-tickets` (GitHub Desktop: Add local repository → Publish), or create the empty repo and add it to the Claude session so Claude can push.
+
+### 2. Vercel project
+The Vercel project `event-tickets` imports the repo. No build settings needed; `vercel.json` has them.
+
+### 3. Storage (required)
+Vercel → project → **Storage** → **Connect Database** → Upstash for Redis (create new, or connect the existing one). Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` itself. All keys are stored under `et:` so a shared database is fine.
+The first time the app opens, it loads the season and the sample requests automatically.
+
+### 4. Environment variables
+| Name | Needed? | Value |
+| --- | --- | --- |
+| `TEAM_ACCESS_CODE` | Yes | Code leadership uses to sign in |
+| `NANA_ACCESS_CODE` | Yes | Nana's code (opens Nana's view). Share only with Nana and her backup |
+| `SENDGRID_API_KEY` | For email | Same SendGrid key as the Vans form |
+| `MAIL_FROM` | For email | Verified sender, e.g. `events@visitanaheim.org` (default) |
+| `NANA_EMAIL` | Optional | Where the morning spreadsheet goes (otherwise Nana's email in Settings) |
+| `CRON_SECRET` | Recommended | Any long random string; protects the morning job |
+
+### 5. SharePoint master spreadsheet (turn on when IT is ready)
+Ask IT for a Microsoft Entra app registration with Microsoft Graph application permissions **Sites.Selected** (granted on the Business Intelligence site) and optionally **Mail.Send**. Then add:
+
+| Name | Value |
+| --- | --- |
+| `MS_TENANT_ID` | Directory (tenant) ID |
+| `MS_CLIENT_ID` | Application (client) ID |
+| `MS_CLIENT_SECRET` | Client secret |
+| `MS_DRIVE_ID` | Drive ID of the document library that holds the Event Ticket Request folder |
+| `MS_FILE_PATH` | Path inside that library, e.g. `Event Ticket Request/Event Tickets - Master.xlsx` |
+
+Once these are set, every change in the app rewrites `Event Tickets - Master.xlsx` in that SharePoint folder, and the morning job refreshes it again. With `MS_*` and `MAIL_FROM` set but no SendGrid key, email goes through Microsoft 365 instead.
+
+Until then, Nana always has the data three ways: the **Download master spreadsheet** button on her Tracker tab, the morning email with the spreadsheet attached, and the live link (Tracker tab › Copy live link for Excel), which a SharePoint workbook can use through Data › From Web.
+
+## Before sharing with leadership
+1. Sign in with Nana's code → Settings → **Remove sample requests**.
+2. Settings → add each approver's email (Ronnie Collins is primary) and Nana's email.
+3. Send leadership the link and the team access code.
